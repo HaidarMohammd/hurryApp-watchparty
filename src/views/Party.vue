@@ -6,15 +6,26 @@
           @pause="pauseVideo"
           @play="playVideo"
           @seeked="changeTimeline"
+          @canplay="() => {
+            videoEle.play()
+          }"
           class="w-full"
           autoplay
           :src="party.video.url"
           ref="videoEle"
           controls
         ></video>
-        <FwbButton @click="copyLink" class="mt-3 w-full" color="green"
-          >Copy Party Link</FwbButton
-        >
+        <div class="flex flex-col gap-3">
+          <FwbButton @click="copyLink" class="mt-3 w-full" color="green"
+            >Copy Party Link</FwbButton
+          >
+              <FwbButton
+              @click="leaveParty"
+              
+              color="red"
+              >Leave Party</FwbButton
+            >
+        </div>
       </div>
       <div
         class="md:w-1/2 w-full h-[80dvh] relative bg-gray-100 rounded-xl mt-2 md:mt-0"
@@ -34,12 +45,8 @@
           </button>
         </div>
         <Members v-if="page == 'members'" :members="party.members" />
-        <FwbButton
-          @click="leaveParty"
-          class="absolute bottom-0 w-full !rounded-t-none"
-          color="red"
-          >Leave Party</FwbButton
-        >
+        <Chat @message-sent="sendMessageSocket" :party="party" v-else />
+    
       </div>
     </div>
   </div>
@@ -53,11 +60,12 @@ import axios from "../axios";
 import { ref, onMounted } from "vue";
 import { toast } from "vue-sonner";
 import { FwbSpinner, FwbButton } from "flowbite-vue";
-import { useRouter, useRoute } from "vue-router";
+import { useRouter, useRoute, onBeforeRouteLeave } from "vue-router";
 import personPic from "../../public/profilePerson.png";
 import { useUserStore } from "@/stores/userStore";
 import { io } from "socket.io-client";
 import Members from "../components/Members.vue";
+import Chat from "../components/Chat.vue";
 
 const { user } = useUserStore();
 const party = ref();
@@ -65,6 +73,7 @@ const route = useRoute();
 const router = useRouter();
 const socket = io("http://localhost:3000");
 const videoEle = ref();
+const time = ref()
 const page = ref("members");
 
 const getParty = async () => {
@@ -81,7 +90,13 @@ const getParty = async () => {
       ) {
         getUser(userId);
       }
+      socket.emit("getTime", videoEle.value.currentTime, userId)
     });
+    socket.on("getTime", (time, userId) => {
+      if (user._id == userId) {
+        time.value = +time
+      }
+    })
     socket.on("leaved", (partyId, userId) => {
       if (
         partyId == party.value._id &&
@@ -104,9 +119,23 @@ const getParty = async () => {
         videoEle.value.play();
       }
     });
-    socket.on("timeline", (partyId, userId, currentTime) => {
+    socket.on("timeline", (partyId, userId, currentTime, isPaused) => {
       if (partyId == party.value._id && userId != user._id) {
-        videoEle.value.currentTime = +currentTime;
+            if (Math.abs(videoEle.value.currentTime - currentTime) > 1) {
+          videoEle.value.currentTime = +currentTime;
+        }
+            if (videoEle.value.paused !== isPaused) {
+          if (isPaused) {
+            videoEle.value.pause();
+          } else {
+            videoEle.value.play();
+          }
+        }
+      }
+    });
+    socket.on("message-sent", (message) => {
+      if (message.partyId == party.value._id && message.sender_id != user._id) {
+        party.value.messages.push(message)
       }
     });
   } catch (e) {
@@ -151,17 +180,30 @@ const leaveParty = async () => {
   }
 };
 
-const pauseVideo = () => socket.emit("paused", party.value._id);
-const playVideo = () => socket.emit("play", party.value._id);
+onBeforeRouteLeave(async (to, from, next) => { leaveParty(); next()})
 
 const changeTimeline = () => {
   socket.emit(
     "timeline",
     party.value._id,
     user._id,
-    videoEle.value.currentTime
+    videoEle.value.currentTime,
+    videoEle.value.paused
   );
 };
+
+const pauseVideo = () => {
+  changeTimeline()
+  socket.emit("paused", party.value._id)
+};
+const playVideo = () => {
+  changeTimeline()
+  socket.emit("play", party.value._id)
+};
+
+
+
+const sendMessageSocket = (message) => {socket.emit("message-sent", message)}
 
 onMounted(getParty);
 </script>

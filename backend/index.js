@@ -46,8 +46,16 @@ io.on("connection", (socket) => {
   socket.on("play", (partyId) => {
     io.emit("play", partyId);
   });
-  socket.on("timeline", (partyId, userId, currentTime) => {
-    io.emit("timeline", partyId, userId, currentTime);
+  socket.on("timeline", (partyId, userId, currentTime, isPaused) => {
+    io.emit("timeline", partyId, userId, currentTime, isPaused);
+  });
+  socket.on("message-sent", (message) => {
+
+    io.emit("message-sent", message);
+  });
+  socket.on("getTime", (time, userId) => {
+
+    io.emit("getTime", time, userId);
   });
 });
 

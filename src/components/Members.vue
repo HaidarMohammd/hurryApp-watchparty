@@ -11,7 +11,7 @@
 
       <img
         class="w-9 h-9 shrink-0 object-cover rounded-full"
-        :src="party.host.profilePic || personPic"
+        :src="member.profilePic || personPic"
         alt=""
       />
     </div>
